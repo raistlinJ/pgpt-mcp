@@ -137,6 +137,22 @@ uv lock
 
 All `uv run …` commands inherit the `.env.local` values that the Makefile exports (e.g., `PENTESTGPT_USE_OLLAMA_DEFAULT`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`), so there is no extra activation/selection logic to remember. If you prefer the raw uv commands, simply run `uv sync --python /opt/homebrew/bin/python3` once and then `uv run pentestgpt --ollama gpt-oss:20b` (or `uv run python -m pentestgpt.gui.ollama_console`).
 
+### Session API & Interaction Providers
+
+PentestGPT is now driven by a reusable session layer so UIs no longer need to mimic the legacy TTY prompts.
+
+- `pentestgpt.session.PentestGPTSession` owns the agent lifecycle. The CLI calls `session.run()` with a `PromptToolkitInteractionProvider`, while the PySide6 GUI starts the same session with an event callback via `session.start()`.
+- Interaction providers control how user input is gathered:
+  - `PromptToolkitInteractionProvider` (default CLI) wraps the original prompt-toolkit flows, keeping tab-completion and multiline editing intact.
+  - `EventDrivenInteractionProvider` emits structured `SessionEvent` objects (`output`, `state`, `error`, `request`). A GUI or web client subscribes to these events and answers prompts by calling `session.respond(request_id, value)`.
+- Request events cover every prompt the agent issues today: `main_task`, `local_task`, `prompt_text`, `option_select`, `confirm`, `list_select`, and `wait_for_enter`. Each payload contains the prompt text plus any option lists or metadata required to render a native dialog.
+- Building a new front-end now just means:
+  1. Instantiate `PentestGPTSession` with the desired config and an `event_callback`.
+  2. Stream `output` events into your UI, update status indicators on `state`, and show native dialogs/forms when a `request` arrives.
+  3. Relay the chosen value back through `session.respond()`.
+
+This split keeps the business logic inside `pentestgpt.utils.pentest_gpt.PentestGPT` untouched while allowing future surfaces (TUI, web, VS Code, MCP bridge, etc.) to plug in without terminal hacks.
+
 ### Desktop GUI (PySide6)
 
 Prefer a point-and-click interface? A lightweight PySide6 console is now available:
